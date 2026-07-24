@@ -12,7 +12,7 @@ from sklearn.preprocessing import StandardScalar
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from collections import Counter
-from scipy.stats import entropy as scipy_engine
+from scipy.stats import entropy as scipy_entropy
 
 
 #Algorithm to reccomend music, based off your profile / similar songs in terms of features
@@ -156,15 +156,70 @@ def lister_profile(
         return {}
         
     n = len(rows)
-    weights = np.ndarray([recency_decay ** (n-1 - i) for i in range(n)])
+    weights = np.array([recency_decay ** (n-1 - i) for i in range(n)])
     weights /= weights.sum()
 
     #weighted feature averaging grabbing from recency
-    feature_matrix = np.array([[r[f] for f in CLUSTER_FEATURES] for r in rows])
-    feature_vector = (feature_matrix * weights[:, None].sum(axis=0))
+    feature_matrix = np.array([[r[f] for f in CLUSTER_FEATURES] for r in rows]) # multiplyigng feature weights based off rows and cols, rows = songs, cols = features
+    feature_vector = (feature_matrix * weights[:, None]).sum(axis=0)  # reshaping the array to to match ( n, 1) to match (n, num_features)
+    # weights[:, None] multiplies each row by weights to create another colum -> (n,1) instead of (n,)
+
 
     #key preference, music theory
-    preferred_keys: Counter = Counter()
+    preferred_keys: Counter = Counter() #sub class of dict, bulit in 342, counting using accumulating values and keys 
+    for r, w in zip(rows, weights):
+        if r.get("key_detected", True) and int(r["key"]) != -1:
+            preferred_keys[int(r["key"])] += w # appending the keys of the songs into an array to decipher
+        
+    #Mode Preference, major vs minor
+    preferred_modes: dict[int,float] = {0:0.0, 1:0.0} # 0 -> minor / 1 -> major, label: weight
+    for r,w in zip(rows, weights):
+        preferred_modes[int(r["modes"])] += w # same thing, adding a 1 or 0 depending on track's "mood"
+
+    #time signature preference, 3/4, 4/4 = pop, 5/7 = expiremental
+    time_sigs = [int(r["time_signature"]) for r in rows]
+    ts_counts  = Counter(time_sigs)
+    ts_probs = np.array(list(ts_counts.values()), dtype=float) # create a numpy array from the amount of time sigs
+    ts_probs /= ts_probs.sum()  # normalize to sum 1
+    ts_entropy = float(scipy_entropy(ts_probs)) # entropy returns float / higher entropy (0.9) -> higher the unperdictablity
+
+    #genre entropy -> needs a "track_genre" column 
+    genre_entropy = 0.0
+    if "track_genre" in df.columns:
+        genres = [r.get("track_genre", "unknown") for r in rows ]
+        g_counts = Counter(genres)
+        g_probs = np.array(list(g_counts.values()), dtype=float) # create a numpy array from the amount of genres
+        g_probs /= g_probs.sum()  # normalize to sum 1
+        genre_entropy = float(scipy_entropy(g_probs)) # entropy returns float / higher entropy (0.9) -> higher the unperdictablity
+    
+    # explorer score: rythm variety + genre variety
+    #instrumentalness included
+    instr_avg = float(feature_vector[CLUSTER_FEATURES.index("instrumentalness")]) # grab the instrumentalness feature
+    ts_score = min(ts_entropy / 2.0,1.0) 
+    g_score = min(genre_entropy / 3.0,1.0)
+    explorer_score = round(ts_score * 0.4 + g_score * 0.4 + instr_avg * 0.2, 3) # weighted average of all 3 scores
+    # time_sig = 40% of the weight / genres = 40%  / instrumentalness = 20%
+
+    dominant_ts = ts_counts.most_common(1)[0][0] if ts_counts else 4
+    
+    return {
+        "feature_vector":    feature_vector,
+        "preferred_keys":    preferred_keys,
+        "preferred_modes":   preferred_modes,
+        "time_sig_entropy":  round(ts_entropy, 3),
+        "genre_entropy":     round(genre_entropy, 3),
+        "explorer_score":    explorer_score,
+        "dominant_time_sig": dominant_ts,
+        "personality":       TIME_SIG_PERSONALITY.get(dominant_ts, "conventional"),
+    }
+
+
+
+
+
+
+
+
 
 
 
