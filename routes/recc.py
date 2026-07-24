@@ -17,7 +17,7 @@ from scipy.stats import entropy as scipy_engine
 
 #Algorithm to reccomend music, based off your profile / similar songs in terms of features
 #Your local vibe / artist near you = solution to finding smaller artist
-# Isntrument Seperation = vocal heavy, bass heavy, guitar heavy, etc...
+# Instrument Seperation = vocal heavy, bass heavy, guitar heavy, etc...
 # chord/harmony = legnths / tempo maps for legnth
 #genre comparison = do they listen to the same genre all the time or like to expirement?
 #Can also incooperate music theory? reccomending songs in similar keys
@@ -72,7 +72,7 @@ COF_NEIGHBOURS = {
     4: [9, 11],  5: [10, 0],  6: [11, 1],  7: [0, 2],
     8: [1, 3],   9: [2, 4],  10: [3, 5],  11: [4, 6],
 } 
-#Tine - Signature personality labels
+#Time - Signature personality labels
 TIME_SIG_PERSONALITY = {
     3:"waltz", # 3/4 swaying folk/jazz/classical
     4:"conventional", # 4/4 pop, edm, rock normal
@@ -135,8 +135,37 @@ def fit_model(X_scaled:np.ndarray) -> KMeans:
     print(f"KMeans fitted - at {N_CLUSTERS} clusters. Inertia at {km.inertia_:.1f}")
     return km
 
+def find_optimal_k(X_scaled: np.ndarray, k_range: range = range(5, 40)) -> None:
+    print("\tInertia")
+    for k in k_range:
+        km = KMeans(n_clusters=k, n_init=10, random_state=42)
+        km.fit(X_scaled)
+        print(f"{k}\t {km.inertia_:1.1f}")
 
 #Listener Profiling, build tatse fingerprint from play history = Weighted feature averaging
+def lister_profile(
+        history: list[str], # ordered list of track_ids ( oldest ->most recent)
+        df: pd.DataFrame,
+        recency_decay: float = 0.92,) -> dict: #recent plays weights heavily -> larger number
+    rows = [] # to track recency, the amount of time a track pops up 
+    for track_id in history:
+        match = df[df["track_id"] == track_id]
+        if not match.empty:
+            rows.append(match.iloc[0]) #iloc = int locator, returns the first row in the panda series 
+    if not rows:
+        return {}
+        
+    n = len(rows)
+    weights = np.ndarray([recency_decay ** (n-1 - i) for i in range(n)])
+    weights /= weights.sum()
+
+    #weighted feature averaging grabbing from recency
+    feature_matrix = np.array([[r[f] for f in CLUSTER_FEATURES] for r in rows])
+    feature_vector = (feature_matrix * weights[:, None].sum(axis=0))
+
+    #key preference, music theory
+    preferred_keys: Counter = Counter()
+
 
 
 #Musical Theory Matching  = same key, compatability, BPM, Major/ Minor mood = rule-based logic
