@@ -8,16 +8,66 @@
     <title>Musik</title>
 </head>
 <body>
+   <!--
     <h1>Music on Musik</h1>
     <p>The One in all music application, your local radios, your local music, your local vibes</p>
-    <!---Could Play local music from all areas, show you based off location you provide, does not collect infortmation-->
-    <!---Set Up Account Log in Page-->
-    <!--Set up secruity for API Call / The video I sent to Mindy-->
-
+    <p>Could Play local music from all areas, show you based off location you provide, does not collect infortmation</p
+    <p>Set up secruity for API Call / The video I sent to Mindy</p>
+    -->
 <div class="sidebar">
-    <div class="top"></div>
-    <ul></ul>
+    <div class="top">
+        <i class="bx bx-menu" id="btn"></i>
+    </div>
+    <ul>
+        <li>
+            <a href="#">
+                <i class="bx bxs-grid-alt"></i>
+                <span class="nav-item">Home</span>
+            </a>
+            <span class="tooltip">Home</span>
+        </li>
+        <li>
+            <a href="#">
+                <i class="bx bxs-grid-alt"></i>
+                <span class="nav-item">Home</span>
+            </a>
+            <span class="tooltip">Home</span>
+        </li>
+        <li>
+            <a href="#">
+                <i class="bx bxs-grid-alt"></i>
+                <span class="nav-item">Home</span>
+            </a>
+            <span class="tooltip">Home</span>
+        </li>
+        <li>
+            <a href="#">
+                <i class="bx bxs-grid-alt"></i>
+                <span class="nav-item">Home</span>
+            </a>
+            <span class="tooltip">Home</span>
+        </li>
+        <li>
+            <a href="#">
+                <i class="bx bxs-grid-alt"></i>
+                <span class="nav-item">Home</span>
+            </a>
+            <span class="tooltip">Home</span>
+        </li>
+        <li>
+            <a href="#">
+                <i class="bx bxs-grid-alt"></i>
+                <span class="nav-item">Home</span>
+            </a>
+            <span class="tooltip">Home</span>
+        </li>
+    </ul>
 
+</div>
+<div class="main-content">
+    <div class="container">
+        <h1 class="logo">Welcome to Musik!!!</h2>
+    </div>
 </div>
 </body>
 <div class ="Musik_Recc">
@@ -30,6 +80,14 @@
 
 </div>
 
+<script>
+    let btn = document.querySelector('#btn')
+    let sidebar = document.querySelector(".sidebar")
+
+    btn.onclick = function () {
+        sidebar.classList.toggle('active');
+    };
+</script>
 
 
 
