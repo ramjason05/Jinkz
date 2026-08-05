@@ -5,6 +5,9 @@
     font-family:"sans-serif";
 
 }
+body {
+        background-color:#030935;
+}
 
 .sidebar {
     position:absolute;
@@ -81,15 +84,53 @@
 
 .main-content { 
     position:relative;
-    background-color:#eee;
+    background: linear-gradient(158deg,rgba(3,3,6,1) 39%, rgba(92,190,255, 1) 100%);
     min-height:100vh;
     top:0;
     left:80px;
     transition:all 0.5s ease;
-    width: calc(100% -80px);
+    width: calc(100% - 80px);
     padding: 1rem;
 }
-.logo {
-    width: 200%;
+.container {
+    text-align:center;
+}
+.logo{
     color:#5800b3;
+    text-align:center;
+}
+.text { 
+    color:#9AA8C5;
+    box-shadow: rgba(255,255,255, 0.7);
+    text-align:center;
+}
+
+.main-box-border {
+    width:100%;
+    display:inline-flex;
+    align-items:last baseline;
+    justify-content:center;
+    border-radius:35px;
+    background-color:black;
+    min-height: 250px;
+    box-shadow: 0 20px 20px 0 rgba(10,7,3, 0.7)
+}
+img {
+    width:20%;
+    border-radius:250px;/*top left bottom right or all tg*/
+    position:relative;
+    animation: spin 15s linear infinite; 
+    /*animation-play-state:paused; */
+}
+.img-border {
+     border: 3px solid rgba(0,0,0,1);
+}
+@keyframes spin {
+    from {
+        transform:rotate(0deg);
+    }
+    to {
+        transform:rotate(360deg);
+
+    }
 }

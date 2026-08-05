@@ -214,18 +214,29 @@ def lister_profile(
     }
 
 
-
-
-
-
-
-
-
-
-
 #Musical Theory Matching  = same key, compatability, BPM, Major/ Minor mood = rule-based logic
 
-#Artist Discovery(Local Vibe) = surface lesser-known artists in the same clisters = popularity score filter
+def music_theory_score(
+        query_row: pd.series,
+        canidate_row:pd.Series,
+        profile: dict | None = None,
+) -> float:
+    #returns a 0-1 for how musically compatible a canidate is w a query song / listener profile
+    """
+    Scoring breakdown (max 1.0):
+        Same key                → +0.30
+        Relative key            → +0.20  (e.g. C major ↔ A minor)
+        Circle of 5ths adjacent → +0.10
+        Same mode               → +0.20  (both major or both minor)
+        Same time signature     → +0.15
+        Near time signature     → +0.05  (differ by 1)
+        Profile mood alignment  → +0.05  (matches user's major/minor lean)
+    """
+    score = 0.0
+    q_key = int(query_row["key"])
+
+
+#Artist Discovery(Local Vibe) = surface lesser-known artists in the same clusters = popularity score filter
 """ Work on once main recc is working artist_discovery_filter = surfaces lower-popularity artist
 Need additional data, city tag from spotify artist API
 """
