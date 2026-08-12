@@ -268,7 +268,40 @@ def music_theory_score(
             score += 0.05
     return min(score,1.0)
 
+#Artist Discovery Filter 
+
+def artist_discovery_filter(
+        canidates: pd.DataFrame, # 1D labeled array 
+        profile: dict | None = None,
+        popularity_col: str ="popularity",
+        explorer_boost_thresh: float =0.5,
+) -> pd.Series:
+    """
+    Adjusts canidate scores based off listerner type/popularity
+
+    exploerer_score > 0.5 => recc more underground artists
+    comfort listeners => recc more popular artists
+
+    Returns a multiplier series aligned to canidates.index(1.0)
+    """
+    if popularity_col not in canidates.columns:
+        return pd.Series(1.0, index=canidates.index) #index = label for the data and replacing with baseline 1.0 score
+
+    pop = canidates[popularity_col].clip(0,100) / 100.0 #clip limits values under 100, then turns them into percentages
+    exploerer_score = profile.get("explorer_score", 0.5) if profile else 0.5
+
+    if exploerer_score >= explorer_boost_thresh:
+        #low popularity -> higher multiplier
+        adjustment = 1.0 +(1.0 -pop) * 0.4
+    else:
+        adjustment = 1.0 + pop * 0.3 
+    return adjustment
+
+
+
+
     
+
 
 
 
