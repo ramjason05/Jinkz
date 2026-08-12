@@ -72,7 +72,8 @@ COF_NEIGHBOURS = {
     4: [9, 11],  5: [10, 0],  6: [11, 1],  7: [0, 2],
     8: [1, 3],   9: [2, 4],  10: [3, 5],  11: [4, 6],
 } 
-#Time - Signature personality labels
+#Time - Signature personality labels 
+#3-7 dictionary, key:int, value:str
 TIME_SIG_PERSONALITY = {
     3:"waltz", # 3/4 swaying folk/jazz/classical
     4:"conventional", # 4/4 pop, edm, rock normal
@@ -224,16 +225,53 @@ def music_theory_score(
     #returns a 0-1 for how musically compatible a canidate is w a query song / listener profile
     """
     Scoring breakdown (max 1.0):
-        Same key                → +0.30
-        Relative key            → +0.20  (e.g. C major ↔ A minor)
-        Circle of 5ths adjacent → +0.10
-        Same mode               → +0.20  (both major or both minor)
-        Same time signature     → +0.15
-        Near time signature     → +0.05  (differ by 1)
-        Profile mood alignment  → +0.05  (matches user's major/minor lean)
+        Same key                 +0.30
+        Relative key             +0.20  (e.g. C major ↔ A minor)
+        Circle of 5ths adjacent  +0.10
+        Same mode                +0.20  (both major or both minor)
+        Same time signature      +0.15
+        Near time signature      +0.05  (differ by 1)
+        Profile mood alignment   +0.05  (matches user's major/minor lean)
     """
     score = 0.0
     q_key = int(query_row["key"])
+    c_key = int(canidate_row["key"])
+    q_mode = int(query_row["mode"])
+    c_mode = int(canidate_row["mode"])
+    q_time_sig = int(query_row["time_signature"])
+    c_time_sig = int(canidate_row["time_signature"])
+
+    #Checks for compatibility from the key in the canidate row(pandas series)
+    if q_key != -1 and c_key != -1:
+        if q_key == c_key:
+            score += 0.30
+        elif REL_KEYS.get(q_key) == c_key or REL_KEYS.get(c_key) == q_key:
+            score += 0.20
+        elif c_key in COF_NEIGHBOURS.get(q_key, []):
+            score += 0.10
+    #Mode Compatibility Check to see if Major or Minor
+    if q_mode == c_mode:
+        score += 0.20
+
+    #Time Signature Compatability, 3/4ths, 7ths, etc...
+    if q_time_sig == c_time_sig: 
+        score += 0.15
+
+    if profile and profile.get("preferred_modes"):
+        user_leans_minor = (
+            profile["preferred_modes"].get(0,0) > 
+            profile["preferred_modes"].get(1,0)
+        )
+        if user_leans_minor and c_mode == 0:
+            score += 0.05
+        elif not user_leans_minor and c_mode == 1:
+            score += 0.05
+    return min(score,1.0)
+
+    
+
+
+
 
 
 #Artist Discovery(Local Vibe) = surface lesser-known artists in the same clusters = popularity score filter
