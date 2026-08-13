@@ -112,7 +112,7 @@ def load_data(path:str = DATA_PATH) -> pd.DataFrame:
 def preprocess(df: pd.DataFrame) -> tuple[np.ndarray, StandardScalar]:
     """
     Scaling continous cluster features only
-    Euclidean distances in cluuster spaces caluclated
+    Euclidean distances in cluster spaces caluclated
     """
     X = df[CLUSTER_FEATURES].values # pandas -> NumPy
     scalar = StandardScalar() #  z = (x-mean) / std, it transforms every feature to have mean = 0 and std = 1
@@ -296,6 +296,100 @@ def artist_discovery_filter(
     else:
         adjustment = 1.0 + pop * 0.3 
     return adjustment
+
+#THE RECCOMENDATION ENGINE
+def recc(
+        song_index: int,
+        df:pd.DataFrame,
+        X_scaled:np.ndarray,
+        km: KMeans,
+        profile:dict | None = None,
+        top_n:int = 10,
+        theory_weight:float =0.25,
+        profile_weight: float = 0.2,
+) -> pd.DataFrame:
+    """
+    Hybrid Recc Engine
+    1. K-Means clustering retrieval
+    2. Cosine Similarity -> audio feature similarity
+    3. Profile Similarity -> closeness to listener taste
+    4. Music Theory Compatability
+    5. Artist Discovery Filter
+
+    Weight Distribution(default): 
+        cosine_weight = 1- theory_weight - profile_weight = 0.55
+        theory_weight = 0.25
+        profile_weight = 0.20
+
+    """
+    #K-Means CLustering
+    song_cluster = km.labels_[song_index]
+    song_vector = X_scaled[song_index]
+    query_row = df.iloc[song_index]
+
+    #Labeling the indexes of the songs in same cluster
+    cluster_mask  = km.labels_ == song_cluster
+    cluster_indices = np.where(cluster_mask)[0]
+    cluster_vectors = X_scaled[cluster_mask]
+
+    #Cosine Similarity = measuring the angle between two vectors 
+    #.linalg is a linear algebra module in numpy / .norm calculates legnth(magnitude) of a vector
+    norms = np.linalg.norm(cluster_vectors, axis=1)
+    song_norm = np.linalg.norm(song_vector)
+    cosine_sim =  cluster_vectors @ song_vector / (norms * song_norm + 1e-10) # @ = matrix multiplication, 1e-10 = small # to avoid 0s
+
+    #Profile Similarity
+    #Goal get weights in the range 0-1
+    if profile and "feature_vector" in profile:
+        pv = profile["feature_vector"] # float array (9,) for 9 features
+        pv_norm = pv / (np.linalg.norm(pv) + 1e-10) # normalization (0-1)
+        prof_sim = cluster_vectors @ pv_norm # 1D array by mutliplying w cluster_vectors(2D, (n,9)) w nomralization for each song
+        ptp = prof_sim.ptp() #peak to peak, difference between max and min values
+        prof_sim = (prof_sim - prof_sim.min()) / (ptp if ptp > 0 else 1.0) #min-max normalization, min =0 now / max=1
+    else: 
+        prof_sim = np.zeros_like(cosine_sim) # would create same shape, data type as cosine_sim but filled with zeros
+
+    #Theory Scores
+    canidates_df = df.iloc[cluster_indices].copy() # copying cluster songs into new dataframe
+    theory_scores = np.array([
+        music_theory_score(query_row, canidates_df.iloc[i], profile) # append the music theory score to 2D numpy array, going throuhg canidates
+        for i in range(len(canidates_df))
+    ])
+
+    #Diversity Multiplier
+    diversity_adj = artist_discovery_filter(canidates_df, profile).values # returns multiplier series 
+
+    cosine_weight = 1.0 - theory_weight - profile_weight
+    composite = (
+        cosine_weight * cosine_sim + 
+        theory_weight * theory_scores + 
+        profile_weight * prof_sim
+    ) * diversity_adj
+
+    #Sort the query songs and drop
+    sorted_pos = np.argsort(-composite) # " - " means in decending order
+    sorted_pos = np.array([p for p in sorted_pos if p != song_index]) # remove the song from query
+    top_pos = sorted_pos[:top_n]
+    top_indices = cluster_indices[top_pos]
+
+    # Build the results 
+    results_cols = ["track_id", "track_name", "artists"] + CLUSTER_FEATURES + THEORY_FEATURES
+    results_df = df.iloc[top_indices][results_cols].copy()
+    results_df["cosine_similarity"] = cosine_sim[top_pos].round(4)
+    results_df["theory_score"] = theory_scores[top_pos].round(4)
+    results_df["profile_similarity"] =prof_sim[top_pos].round(4)
+    results_df["composite_score"] = composite[top_pos].round(4)
+
+    #Key/ Rythm / Mood
+    results_df["key_name"] = results_df["key"].map(key_mapping) #.map takes int and return its value
+    results_df["mood"] = results_df["mode"].map({1:"major", 0:"minor"}) # assigns labels, major/ minor
+    results_df["rhythm_personality"] = results_df["time_signature"].map(
+        lambda ts: TIME_SIG_PERSONALITY.get(int(ts), "unknown")
+    )
+
+
+
+
 
 
 
