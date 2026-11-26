@@ -8,7 +8,7 @@ import hashlib
 import pandas as pd
 import joblib 
 import numpy as np
-from sklearn.preprocessing import StandardScalar
+from sklearn.preprocessing import StandardScaler
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
 from collections import Counter
@@ -26,8 +26,8 @@ from scipy.stats import entropy as scipy_entropy
 
 
 #Grouping songs by audio features = similarity
-CLUSTER_FEATURES = {
-    "daneability", # range 0-1, 1 dance
+CLUSTER_FEATURES = [
+    "danceability", # range 0-1, 1 dance
     "energy", # range 0-1, fast,loudm noisy the track is, 1 being the most
     "valence", # 0-1, higher to 1 = more positive / closer to 0 = negative, sad, depressed
     "tempo", # 10-250 bpm, float
@@ -36,14 +36,14 @@ CLUSTER_FEATURES = {
     "liveness", #audience present, 1 being its the live edition, reccomend to users who perfer instrumentala
     "speechiness", # 0-1 of how much spoken words, 0.33-0.66 = rap or genres w/ equal beat and lyrics
     "loudness", # how load track is, -60 - 0 db, amplitude research which genres represent which db ranges
-}
-THEORY_FEATURES = {
+]
+THEORY_FEATURES = [
     "key", # Key track is in, -1 - 11, -1 = no key was detected
     "mode", #key is major =1 happy / ulifting, or minor = 0, sader / meloncholy
     "time_signature", # 3-7, example = 3 = 3/4 per beat, how many beats there are per bar
     #Can compare time signatures to genre to see if its expiremental? other a=factorsas well
     # 5/4, 7/4 = unconventional for those like "musical caffeine" , 4/4 conventional in pop/rock/EDM, 3/4 = swaying/waltz
-}
+]
 ALL_FEATURES = CLUSTER_FEATURES + THEORY_FEATURES
 
 key_mapping = {
@@ -96,8 +96,8 @@ def load_data(path:str = DATA_PATH) -> pd.DataFrame:
     required = ["track_id", "track_name", "artists"] + ALL_FEATURES # make sure that csv data has these labels on their songs
 
     #Pre-Processing the csv, change anything from data here
-    df.dropna(subset=required) # Drop empty 
-    df.drop_duplicates(subset= "track_id") #subset, specifies what to search through
+    df = df.dropna(subset=required) # Drop empty 
+    df = df.drop_duplicates(subset= "track_id") #subset, specifies what to search through
     df = df[df["tempo"]> 0 ] # make sure they have above a 0 tempo
 
     df["key_detected"] = df["key"] != -1
@@ -109,19 +109,19 @@ def load_data(path:str = DATA_PATH) -> pd.DataFrame:
     return df
 
 #Pre-Process for K-Means
-def preprocess(df: pd.DataFrame) -> tuple[np.ndarray, StandardScalar]:
+def preprocess(df: pd.DataFrame) -> tuple[np.ndarray, StandardScaler]:
     """
     Scaling continous cluster features only
     Euclidean distances in cluster spaces caluclated
     """
     X = df[CLUSTER_FEATURES].values # pandas -> NumPy
-    scalar = StandardScalar() #  z = (x-mean) / std, it transforms every feature to have mean = 0 and std = 1
+    scalar = StandardScaler() #  z = (x-mean) / std, it transforms every feature to have mean = 0 and std = 1
     #caluclates z-score, it makes all ranges are average, equally important compared to the mean and std
     """
     example: tempo: [125.0,95.0, 76.0, 110.0] --> [0.75, -0.62, -1.42,0.0] (Hypothetical mean 110, std = 24)
     where positive = above average for that feature / negative = below average compared to mean
     """
-    X_scaled = scalar.fit_transformation(X) # from scikit-learn, returns same shape but attatches mean=0 / std =1
+    X_scaled = scalar.fit_transform(X) # from scikit-learn, returns same shape but attatches mean=0 / std =1
     return X_scaled, scalar
 # K Means for scatter plots
 def fit_model(X_scaled:np.ndarray) -> KMeans:
@@ -134,6 +134,7 @@ def fit_model(X_scaled:np.ndarray) -> KMeans:
     )
     km.fit(X_scaled)
     print(f"KMeans fitted - at {N_CLUSTERS} clusters. Inertia at {km.inertia_:.1f}")
+    #Inertia is metric used to measure compactness of clusters 
     return km
 
 def find_optimal_k(X_scaled: np.ndarray, k_range: range = range(5, 40)) -> None:
@@ -144,7 +145,7 @@ def find_optimal_k(X_scaled: np.ndarray, k_range: range = range(5, 40)) -> None:
         print(f"{k}\t {km.inertia_:1.1f}")
 
 #Listener Profiling, build tatse fingerprint from play history = Weighted feature averaging
-def lister_profile(
+def listener_profile(
         history: list[str], # ordered list of track_ids ( oldest ->most recent)
         df: pd.DataFrame,
         recency_decay: float = 0.92,) -> dict: #recent plays weights heavily -> larger number
@@ -162,8 +163,10 @@ def lister_profile(
 
     #weighted feature averaging grabbing from recency
     feature_matrix = np.array([[r[f] for f in CLUSTER_FEATURES] for r in rows]) # multiplyigng feature weights based off rows and cols, rows = songs, cols = features
-    feature_vector = (feature_matrix * weights[:, None]).sum(axis=0)  # reshaping the array to to match ( n, 1) to match (n, num_features)
-    # weights[:, None] multiplies each row by weights to create another colum -> (n,1) instead of (n,)
+    feature_vector = (feature_matrix * weights[:, None]).sum(axis=0)
+    instr_avg = float(feature_vector[CLUSTER_FEATURES.index("instrumentalness")])  # weight balanceer to scale for instrumentalness
+    feature_vector = scalar.transform(feature_vector.reshape(1,-1))[0]  # reshaping the array to to match ( n, 1) to match (n, num_features)
+    # weights[:, None] multiplies each row by weights to create another column -> (n,1) instead of (n,)
 
 
     #key preference, music theory
@@ -175,7 +178,7 @@ def lister_profile(
     #Mode Preference, major vs minor
     preferred_modes: dict[int,float] = {0:0.0, 1:0.0} # 0 -> minor / 1 -> major, label: weight
     for r,w in zip(rows, weights):
-        preferred_modes[int(r["modes"])] += w # same thing, adding a 1 or 0 depending on track's "mood"
+        preferred_modes[int(r["mode"])] += w # same thing, adding a 1 or 0 depending on track's "mood"
 
     #time signature preference, 3/4, 4/4 = pop, 5/7 = expiremental
     time_sigs = [int(r["time_signature"]) for r in rows]
@@ -195,7 +198,6 @@ def lister_profile(
     
     # explorer score: rythm variety + genre variety
     #instrumentalness included
-    instr_avg = float(feature_vector[CLUSTER_FEATURES.index("instrumentalness")]) # grab the instrumentalness feature
     ts_score = min(ts_entropy / 2.0,1.0) 
     g_score = min(genre_entropy / 3.0,1.0)
     explorer_score = round(ts_score * 0.4 + g_score * 0.4 + instr_avg * 0.2, 3) # weighted average of all 3 scores
@@ -218,7 +220,7 @@ def lister_profile(
 #Musical Theory Matching  = same key, compatability, BPM, Major/ Minor mood = rule-based logic
 
 def music_theory_score(
-        query_row: pd.series,
+        query_row: pd.Series,
         canidate_row:pd.Series,
         profile: dict | None = None,
 ) -> float:
@@ -256,6 +258,8 @@ def music_theory_score(
     #Time Signature Compatability, 3/4ths, 7ths, etc...
     if q_time_sig == c_time_sig: 
         score += 0.15
+    elif abs(q_time_sig - c_time_sig) == 1:
+        score += 0.05
 
     if profile and profile.get("preferred_modes"):
         user_leans_minor = (
@@ -274,7 +278,7 @@ def artist_discovery_filter(
         canidates: pd.DataFrame, # 1D labeled array 
         profile: dict | None = None,
         popularity_col: str ="popularity",
-        explorer_boost_thresh: float =0.5,
+        explorer_boost_thresh: float =0.45,
 ) -> pd.Series:
     """
     Adjusts canidate scores based off listerner type/popularity
@@ -344,7 +348,7 @@ def recc(
         pv = profile["feature_vector"] # float array (9,) for 9 features
         pv_norm = pv / (np.linalg.norm(pv) + 1e-10) # normalization (0-1)
         prof_sim = cluster_vectors @ pv_norm # 1D array by mutliplying w cluster_vectors(2D, (n,9)) w nomralization for each song
-        ptp = prof_sim.ptp() #peak to peak, difference between max and min values
+        ptp = np.ptp(prof_sim) #peak to peak, difference between max and min values
         prof_sim = (prof_sim - prof_sim.min()) / (ptp if ptp > 0 else 1.0) #min-max normalization, min =0 now / max=1
     else: 
         prof_sim = np.zeros_like(cosine_sim) # would create same shape, data type as cosine_sim but filled with zeros
@@ -368,7 +372,7 @@ def recc(
 
     #Sort the query songs and drop
     sorted_pos = np.argsort(-composite) # " - " means in decending order
-    sorted_pos = np.array([p for p in sorted_pos if p != song_index]) # remove the song from query
+    sorted_pos = np.array([p for p in sorted_pos if cluster_indices[p] != song_index], dtype=int) # remove the song from query
     top_pos = sorted_pos[:top_n]
     top_indices = cluster_indices[top_pos]
 
@@ -384,20 +388,123 @@ def recc(
     results_df["key_name"] = results_df["key"].map(key_mapping) #.map takes int and return its value
     results_df["mood"] = results_df["mode"].map({1:"major", 0:"minor"}) # assigns labels, major/ minor
     results_df["rhythm_personality"] = results_df["time_signature"].map(
-        lambda ts: TIME_SIG_PERSONALITY.get(int(ts), "unknown")
+        lambda ts: TIME_SIG_PERSONALITY.get(int(ts), "unknown") # applying time_signature personality labels
     )
+    return results_df.reset_index(drop=True)
 
+# PCA for scatter plot
+"""
+Principal Component Analysis
+Takes Data from with many features, finds directions with most spread/variation, re-projects points in those direction
 
+Making 9D song data -> 2D scatter plot
+"""
+def compute_pca(X_scaled:np.ndarray) -> np.ndarray:
+    """
+    Returns (n_songs, 2) for recc scatter plot
+    """
+    pca = PCA(n_components=2, random_state = 42) # 2 components = 2 directions of variance, 
+    return pca.fit_transform(X_scaled) #fit = calculates those 2 directions / transform = gives every song coordinates 
 
-
-
-
-
-
+#Persists / Load Artifacts
+class ModelMismatchError(Exception):
+    """rasied when the model loaded at the moment of training is with different settings / data / features
+    """
     
 
+def _compute_fingerprint(df:pd.DataFrame) -> dict:
+    """fingerprint Dictionary that identifies:
+        -Dataset : SHA -256 of all track_ids in curr order
+        -Features : SHA-256 of all cluster features
+        -Config : N_Clusters value 
+    """
+    #Dataset fingerprint
+    track_id_blob = "|".join(df["track_id"].astype(str).tolist()).encode()
+    dataset_hash = hashlib.sha256(track_id_blob).hexdigest()
 
+    #Feature fingerprint: hash the sorted + joined feature column names
+    feature_blob = "|".join(CLUSTER_FEATURES).encode()
+    feature_hash = hashlib.sha256(feature_blob).hexdigest()
 
+    return {
+        "dataset_hash": dataset_hash,
+        "feature_hash": feature_hash,
+        "n_clusters": N_CLUSTERS,
+        "n_tracks": len(df),
+    }
+def save_artifacts(
+        km: KMeans,
+        scalar: StandardScaler,
+        df: pd.DataFrame,
+        path: str = MODEL_PATH,
+) -> None:
+    #Save trained model, scalar, fingerprint
+    fingerprint = _compute_fingerprint(df)
+    payload = {
+        "model": km,
+        "scalar": scalar,
+        "fingerprint": fingerprint,
+    }
+    joblib.dump(payload, path) # the saved model as a binary buffer due to joblib:  a copy of the model
+    #.dump() saves model in disk-efficient manner / .load() grabs from memory-> python object that can be used again
+    print( f" Artifacts saved in : {path}")
+
+def load_artifacts(
+        df:pd.DataFrame,
+        path: str = MODEL_PATH,
+) -> tuple[KMeans, StandardScaler]:
+    """
+    Load saved artifacts, raises errors if something not found:
+        - FileNotFoundError - model.joblib does not exist yet
+        - ModelMisMatchError - fingerprint check failed (stale model)
+    """
+    payload = joblib.load(path)
+    saved_fp = payload.get("fingerprint", {})
+    current_fp = _compute_fingerprint(df)
+
+    errors = []
+    if saved_fp.get("dataset_hash") != current_fp["dataset_hash"]:
+        errors.append(
+            f"  Dataset mismatch — saved model was trained on {saved_fp.get('n_tracks', '?'):,} tracks "
+            f"(hash: {saved_fp.get('dataset_hash', '?')[:16]}…) "
+            f"but current CSV has {current_fp['n_tracks']:,} tracks "
+            f"(hash: {current_fp['dataset_hash'][:16]}…)."
+        )
+
+    if saved_fp.get("feature_hash") != current_fp["feature_hash"]:
+        errors.append(
+            f"  Feature mismatch — CLUSTER_FEATURES has changed since the model was saved. "
+            f"Saved hash: {saved_fp.get('feature_hash', '?')[:16]}… "
+            f"Current hash: {current_fp['feature_hash'][:16]}…"
+        )
+
+    if saved_fp.get("n_clusters") != current_fp["n_clusters"]:
+        errors.append(
+            f"  Cluster count mismatch — saved model used N_CLUSTERS={saved_fp.get('n_clusters', '?')} "
+            f"but current config is N_CLUSTERS={current_fp['n_clusters']}."
+        )
+
+    if errors:
+        raise ModelMismatchError(
+            "model.joblib is out of sync with the current data/config. "
+            "Re-run `python recommender.py` to retrain.\n"
+            + "\n".join(errors)
+        )
+
+    print(
+        f"Artifacts loaded from {path} ✓\n"
+        f"  tracks: {current_fp['n_tracks']:,}  |  "
+        f"clusters: {current_fp['n_clusters']}  |  "
+        f"hash: {current_fp['dataset_hash'][:16]}…"
+    )
+    return payload["model"], payload["scalar"]
+
+def build(data_path: str = DATA_PATH):
+    df = load_data(data_path)
+    X_scaled, scalar = preprocess(df)
+    km = fit_model(X_scaled)
+    save_artifacts(km, scalar, df) #df now passed so fingerprint is stored
+    return df, X_scaled, km, scalar
 
 
 
@@ -412,5 +519,20 @@ Need additional data, city tag from spotify artist API
 
 
 if __name__ == "__main__":
-    example_var  = 0#df.iloc[0]["trackname" 
-    print(f"\n Sample reccomendations for: {example_var}")
+    df, X_scaled, km, scalar= build()
+    recs = recc(0, df, X_scaled, km, top_n = 5)
+    print(f"\nReccomendations for : {df.iloc[0]['track_name']}")
+    print(recs[["track_name", "artists", "key_name", "mood",
+                "rhythm_personality", "composite_score"]].to_string(index=False)) # Pandas Function : doesn't display row index(surrogate)
+    mock_history = df["track_id"].iloc[:10].tolist()
+    profile = listener_profile(mock_history, df, scalar)
+    print(f"\n Listener profile - personality: {profile['personality']}, "
+          f"exploerer score : {profile['explorer_score']}")
+    recs_p = recc(0, df, X_scaled, km, profile = profile, top_n=5)
+    print(f"\n Profile-aware reccomendations for: {df.iloc[0]['track_name']}")
+    print(recs_p[["track_name", "artists", "key_name", "mood",
+                  "rhythm_personality", "composite_score"]].to_string(index=False))
+      
+
+
+    

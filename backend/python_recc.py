@@ -1,5 +1,5 @@
 """
-main = linker using fastAPI to map JSON to fronetnd
+main = linker using fastAPI to map JSON to frontend
 1. User plays some songs
    → POST /profile { history: [...track_ids] }
    ← { session_id: "abc-123", profile: { personality, explorer_score, ... } }
