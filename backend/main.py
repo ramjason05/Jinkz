@@ -88,7 +88,7 @@ app.add_middleware(
 #from Pydantic: BaseModel lays out what data is expected
 #turns raw JSON text into objects that we can use  
 class ProfileRequest(BaseModel):
-    #Field = attatches a default value
+    #Field = attatches a default valu, it checks the actual request
     history: list[str] = Field(...,min_length=1) #track_ids, oldest first
     recency_decay: float = Field(0.92, ge=0.5, le=1.0) # 1.0 plays count equaly
 
@@ -169,6 +169,96 @@ def build_profile(body: ProfileRequest):
     }
 
 app.post("/reccomend")
+def reccomend_songs(body: ReccomendRequest):
+    """
+    Reccomend songs comapred to tracks_id 
+    If session_id is given then taken into account
+
+    returns JSON query:
+         {
+          "query": {"track_id": "...", "track_name": "...", "artists": "...", "cluster": 7},
+          "profile_used": true,
+          "recommendations": [        # best first, length = top_n
+            {
+              "track_id": "...", "track_name": "...", "artists": "...",
+              ...the 9 audio features, key, mode, time_signature (same as /songs)...,
+              "key_name": "A", "mood": "minor", "rhythm_personality": "conventional",
+              "cosine_similarity": 0.93,    # audio closeness to the query song
+              "theory_score": 0.65,         # key/mode/time-signature fit, 0-1
+              "profile_similarity": 0.71,   # match to listener profile, 0-1 (0 if no profile)
+              "composite_score": 0.84       # final ranking score
+            }
+          ]
+        }
+    """
+    if body.theory_weight + body.profile_weight > 1.0:
+        raise HTTPException(422, "Theory weight and profile weight needs to be 1.0 or less")
+    matches = state.df.index[state.df["track_id"] == body.track_id]
+    if matches.empty:
+        raise HTTPException(404, f"Track Id: {body.track_id} not found")
+    idx = int(matches[0])
+
+    profile = None
+    if body.session_id:
+        profile = state.profiles.get(body.session_id)
+        if profile is None:
+            raise HTTPException(404, "session_id not found, build one at POST /proifle")
+    recs_df = rec.recc( 
+        song_index = idx,
+        df = state.df,
+        X_scaled = state.X_sclaed,
+        km = state.km,
+        profile = profile,
+        top_n = body.top_n,
+        theory_weight = body.theory_weight,
+        profile_weight = body.profile_weight,
+    )
+    query = state.df.iloc[idx]
+    return {
+      "query": {
+          "track_id": query["track_id"],
+          "track_name": query["track_name"],
+          "artist": query["artists"],
+          "cluster": int(state.km.labels_[idx])
+      },
+      "profile_used": profile is not None,
+      "reccomendations": recs_df.to_dict("records"),
+    }
+
 
 app.get("/clusters")
+#Query is FastAPI function = that collects parameters from the URL Query String
+#Example: GET /clusters?max_points= 500&cluster_id= 7
+#                          ^                       ^     = functions arguments
+"""
+    Scatter Plot Data: Each song's 2D pos(PCA) and K Means cluster
 
+    no cluster_id --> random sample of max_points songs
+    with cluster_id --> returns every song in that cluster
+
+    returns list:
+      {"track_id": "...", "track_name": "...", "artists": "...",
+         "cluster": 7, "x": 1.2345, "y": -0.5678}
+"""
+def clusters(max_points: int = Query(3000, ge=100, le=20000), cluster_id: int | None = Query(None, ge=0)):
+   if cluster_id is not None:
+         idx = np.where(state.km.labels_ == cluster_id)[0]
+   else:
+      idx = np.arrange(len(state.df))
+      if len(idx) > max_points:
+            idx = np.random.default_rng(42).choice(idx, max_points, replace = False) # NumPY functions
+            #default_rng = random number generator with 42 as the seed
+            #choice  = randomly chooses max_points from idx 
+            #replace = False no item can be choosen twice
+   out = state.df.iloc[idx]["track_id", "track_name", "artists"].copy()
+   out["cluster"] = state.km.labels_[idx]
+   out["x"] = state.pca_coords[idx, 0].round(4)
+   out["y"] = state.pca_coords[idx,1].round(4)
+   return out.to_dict("records")
+   #refers to pandas function -> one dict per row
+
+
+
+
+
+      

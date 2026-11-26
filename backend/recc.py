@@ -85,7 +85,7 @@ TIME_SIG_PERSONALITY = {
 
 N_CLUSTERS = 20
 MODEL_PATH = "model.joblib" #converts your trained python object into binary file, instead of re-training every time it is called, trianed for large numpy arrays
-DATA_PATH = "datasets/example.csv"
+DATA_PATH = "datasets/kaggle_dataset.csv"
 
 def load_data(path:str = DATA_PATH) -> pd.DataFrame:
     """
@@ -148,6 +148,7 @@ def find_optimal_k(X_scaled: np.ndarray, k_range: range = range(5, 40)) -> None:
 def listener_profile(
         history: list[str], # ordered list of track_ids ( oldest ->most recent)
         df: pd.DataFrame,
+        scalar: StandardScaler,
         recency_decay: float = 0.92,) -> dict: #recent plays weights heavily -> larger number
     rows = [] # to track recency, the amount of time a track pops up 
     for track_id in history:
